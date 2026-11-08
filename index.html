@@ -1,0 +1,85 @@
+// Состояние: [HP, Щит, Топливо, Кредиты, Ракеты, Ряд, Узел, Сектор]
+let S = [100, 40, 14, 180, 4, 0, null, 1], map = [], enemy = null;
+const T = { E: ['•','Космос'], C: ['⚔️','Враг'], TR: ['🏪','Торговец'], EV: ['❓','Событие'] };
+
+window.onload = () => { init(); };
+
+function init() {
+    S = [100, 40, 14, 180, 4, 0, null, S[7]];
+    map = Array.from({length: 5}, (_, r) => Array.from({length: 3}, () => {
+        let type = Object.keys(T)[Math.floor(Math.random() * 4)];
+        return { type: r === 0 ? 'E' : (r === 4 ? 'C' : type), v: false };
+    }));
+    log('SYS', `Сектор ${S[7]} начат.`); update();
+}
+
+function update() {
+    S[0] = Math.max(0, Math.min(100, S[0])); S[1] = Math.max(0, Math.min(40, S[1]));
+    ['hp','shield','fuel','credits','missiles'].forEach((k, i) => document.getElementById(`lbl-${k}`).innerText = S[i]);
+    document.getElementById('lbl-sector').innerText = `Сектор: ${S[7]}/5`;
+    
+    // Отрисовка карты (сверху вниз)
+    const grid = document.getElementById('map-grid'); grid.innerHTML = '';
+    for (let r = 4; r >= 0; r--) {
+        const row = document.createElement('div'); row.className = 'map-row';
+        map[r].forEach((n, idx) => {
+            const b = document.createElement('button'); b.className = `map-node ${r==S[5]&&idx==S[6]?'current':(n.v?'visited':'')}`;
+            b.innerHTML = T[n.type][0];
+            b.disabled = enemy || n.v || !((S[6] === null && r === 0) || (r === S[5] + 1 && S[6] !== null));
+            b.onclick = () => move(r, idx);
+            row.appendChild(b);
+        });
+        grid.appendChild(row);
+    }
+    renderActions();
+}
+
+function move(r, idx) {
+    if (S[2]-- <= 0) return log('SYS', 'Нет топлива!');
+    S[5] = r; S[6] = idx; map[r][idx].v = true;
+    let type = map[r][idx].type;
+    log('STORY', `Прыжок в: ${T[type][1]}`);
+    
+    if (type === 'C') enemy = { hp: 40, s: 10 };
+    if (type === 'EV') {
+        let ev = [{t: 'Нашли тайник', a: () => S[3] += 40}, {t: 'Аномалия', a: () => { S[1]=0; S[0]-=15; }}][Math.floor(Math.random() * 2)];
+        log('EV', ev.t); ev.a();
+    }
+    update();
+}
+
+function renderActions() {
+    const a = document.getElementById('action-area'); a.innerHTML = '';
+    if (enemy) {
+        a.innerHTML = `<div>Враг HP:${enemy.hp} SH:${enemy.s}</div>
+            <button class="action-btn" onclick="hit('L')">💥</button>
+            <button class="action-btn" onclick="hit('M')" ${S[4]<=0?'disabled':''}>🚀 (${S[4]})</button>`;
+    } else if (map[S[5]]?.[S[6]]?.type === 'TR') {
+        a.innerHTML = `<button class="action-btn" onclick="buy(15,2,4)">⛽ (-15¤)</button>
+            <button class="action-btn" onclick="buy(25,0,25)">🛠️ (-25¤)</button>
+            <button class="action-btn" onclick="map[${S[5]}][${S[6]}].type='E';update()">Выйти</button>`;
+    } else if (S[5] === 4 && !enemy) {
+        a.innerHTML = `<button class="action-btn" onclick="S[7]++;init()">👉 Следующий сектор</button>`;
+    }
+    if (S[0] <= 0) alert('КОРАБЛЬ УНИЧТОЖЕН');
+    if (S[2] <= 0 && !enemy && S[5] < 4) alert('ДРЕЙФ В ПУСТОТЕ');
+}
+
+function hit(t) {
+    let d = t === 'L' ? Math.floor(Math.random()*8)+5 : (S[4]--, Math.floor(Math.random()*15)+15);
+    if (t === 'L' && enemy.s > 0) { enemy.s -= d; if (enemy.s < 0) { enemy.hp += enemy.s; enemy.s = 0; } } else enemy.hp -= d;
+    log('COMBAT', `Вы нанесли ${d} урона.`);
+    if (enemy.hp <= 0) { log('SYS', 'Враг уничтожен! +60¤ +1🚀'); S[3]+=60; S[4]++; enemy = null; return update(); }
+    
+    let ed = Math.floor(Math.random()*10)+4; S[1] > 0 ? (S[1] -= ed, S[1] < 0 ? (S[0] += S[1], S[1] = 0) : 0) : S[0] -= ed;
+    if (S[1] < 40) S[1] = Math.min(40, S[1] + 2);
+    log('COMBAT', `Враг нанес ${ed} урона.`); update();
+}
+
+function buy(cost, idx, val) { if (S[3] >= cost) { S[3] -= cost; S[idx] += val; log('SYS', 'Успешная покупка.'); update(); } }
+
+function log(t, txt) {
+    const area = document.getElementById('log-area'); if (!area) return;
+    area.innerHTML += `<div>[${t}]: ${txt}</div>`; area.scrollTop = area.scrollHeight;
+}
+function switchTab(t) { ['status','map','log'].forEach(p => document.getElementById(`tab-${p}`).classList.toggle('active-tab', p === t)); }
